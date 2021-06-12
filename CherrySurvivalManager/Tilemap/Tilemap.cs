@@ -15,20 +15,23 @@ namespace CherrySurvivalManager.Tilemap {
         public int ChunkSize { get => _chunkSize; private set => _chunkSize = value; }
         public int TileSize { get => _tileSize; private set => _tileSize = value; }
         public int NumLayers { get => _numLayers; private set => _numLayers = value; }
+        public Texture Tileset { get => _tileset; private set => _tileset = value; }
 
         public Tilemap(string tilesetPath, int chunkSize, int tileSize, int numLayers) {
             _chunkSize = chunkSize;
             _tileSize = tileSize;
             _numLayers = numLayers;
-            _tileset = new Texture(tilesetPath);
+            Tileset = new Texture(tilesetPath);
+            _chunks = new Dictionary<Tuple<int, int>, Chunk>();
         }
 
-        public void AddChunk(Tuple<int, int> pos) {
+        public Chunk AddChunk(Tuple<int, int> pos) {
             _chunks[pos] = new Chunk(this, pos);
+            return _chunks[pos];
         }
 
-        public void AddChunk(int x, int y) {
-            AddChunk(new Tuple<int, int>(x, y));
+        public Chunk AddChunk(int x, int y) {
+            return AddChunk(new Tuple<int, int>(x, y));
         }
 
         public Chunk GetChunk(int x, int y) {
@@ -43,9 +46,12 @@ namespace CherrySurvivalManager.Tilemap {
 
         public void Draw(RenderTarget target, RenderStates states) {
             foreach(KeyValuePair<Tuple<int, int>, Chunk> pair in _chunks) {
+
+                states.Transform *= Transform;
+
                 Chunk c = pair.Value;
                 if (c.IsActive)
-                    c.Draw()
+                    target.Draw(c, states);
             }
         }
     }

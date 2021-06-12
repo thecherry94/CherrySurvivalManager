@@ -21,11 +21,16 @@ namespace CherrySurvivalManager.Tilemap {
 
         public Chunk(Tilemap map, Tuple<int, int> pos) {
             _map = map;
+            _active = true;
+            _visible = true;
+            _worldPos = pos;
+            _tileset = map.Tileset;
             int chunkSize = _map.ChunkSize;
             int tileSize = _map.TileSize;
             int numLayers = _map.NumLayers;
             _needsRenderUpdate = true;
             _textureBuffer = new RenderTexture[numLayers];
+            _textureBufferInvisible = new RenderTexture((uint)(chunkSize * tileSize), (uint)(chunkSize * tileSize));
 
             for (int i = 0; i < numLayers; i++) {
                 _textureBuffer[i] = new RenderTexture((uint)(chunkSize * tileSize), (uint)(chunkSize * tileSize));
@@ -33,8 +38,8 @@ namespace CherrySurvivalManager.Tilemap {
 
             // Reserve memory for all tiles on all layers on the tilemap
             _tiles = new int[_map.NumLayers][];          
-            for (int i = 0; i < _map.ChunkSize; i++) {
-                _tiles[i] = new int[_map.ChunkSize];
+            for (int i = 0; i < numLayers; i++) {
+                _tiles[i] = new int[chunkSize * chunkSize];
                 for (int j = 0; j < chunkSize * chunkSize; j++) {
                     _tiles[i][j] = -1;
                 }
@@ -46,6 +51,7 @@ namespace CherrySurvivalManager.Tilemap {
                 _texCoords[i] = new Vector2f[chunkSize * chunkSize * 4];
             }
 
+            _vertices = new VertexArray();
             _vertices.PrimitiveType = PrimitiveType.Quads;
             _vertices.Resize((uint)(chunkSize * chunkSize * 4));
             
@@ -71,11 +77,13 @@ namespace CherrySurvivalManager.Tilemap {
                     Vertex q3 = _vertices[idx + 2];
                     Vertex q4 = _vertices[idx + 3];
 
+
+
                     // Set position for tiles on world space
                     q1.Position = new Vector2f(i * tileSize, j * tileSize);
                     q2.Position = new Vector2f((i + 1) * tileSize, j * tileSize);
                     q3.Position = new Vector2f((i + 1) * tileSize, (j + 1) * tileSize);
-                    q4.Position = new Vector2f(i * tileSize, (j + 1) * tileSize);
+                    q4.Position = new Vector2f(i * tileSize , (j + 1) * tileSize);
 
                     // Set texture coordinates for the first layer
                     q1.TexCoords = new Vector2f(tu * tileSize, tv * tileSize);
@@ -118,10 +126,52 @@ namespace CherrySurvivalManager.Tilemap {
             }
         }
 
+        protected void RecalculateTextureCoordinates(int layer) {
+            int chunkSize = _map.ChunkSize;
+            int tileSize = _map.TileSize;
+
+            for (int i = 0; i < chunkSize; i++) {
+                for (int j = 0; j < chunkSize; j++) {
+                    int tileNumber = _tiles[layer][i + j * chunkSize];
+                    int tu;
+                    int tv;
+
+                    // A negative tile numbers indicates an empty tile
+                    if (tileNumber < 0) {
+                        tu = 0;
+                        tv = 0;
+                    } else {
+                        tu = tileNumber % ((int)_tileset.Size.X / tileSize);
+                        tv = tileNumber / ((int)_tileset.Size.X / tileSize);
+                    }
+
+                    uint idx = (uint)(i + j * chunkSize) * 4;
+                    _texCoords[layer][idx] = new Vector2f(tu * tileSize, tv * tileSize);
+                    _texCoords[layer][idx + 1] = new Vector2f((tu + 1) * tileSize, tv * tileSize);
+                    _texCoords[layer][idx + 2] = new Vector2f((tu + 1) * tileSize, (tv + 1) * tileSize);
+                    _texCoords[layer][idx + 3] = new Vector2f(tu * tileSize, (tv + 1) * tileSize);
+                }
+            }
+            
+        }
+
         public bool IsActive { get => _active; set => _active = value; }
         public bool IsVisible { get => _visible; set => _visible = value; }
 
+        public void SetTiles(int layer, int[] tiles) {
+            _tiles[layer] = tiles;
+            RecalculateTextureCoordinates(layer);
+            _needsRenderUpdate = true;
+        }
+
+        public int[] GetTiles(int layer) {
+            return _tiles[layer];
+        }
+
         public void Draw(RenderTarget target, RenderStates states) {
+            int chunkSize = _map.ChunkSize;
+            int tileSize = _map.TileSize;
+
             // Apparently something changed and the texture buffers need an update
             if (_needsRenderUpdate) {               
                 states.Texture = _tileset;
@@ -151,18 +201,22 @@ namespace CherrySurvivalManager.Tilemap {
 
             // Apply transforms now since it's supposed to affect all layers the same way
             states.Transform *= Transform;
+            int offsetX = _worldPos.Item1 * chunkSize * tileSize;
+            int offsetY = _worldPos.Item2 * chunkSize * tileSize;
 
             if (_visible) {
                 // Draw all layers
                 for (int i = 0; i < _map.NumLayers; i++) {
                     Sprite sprite = new Sprite(_textureBuffer[i].Texture);
-                    sprite.Position = new Vector2f(_worldPos.Item1 * _map.ChunkSize, _worldPos.Item2 * _map.ChunkSize);
+                    sprite.Position = new Vector2f(offsetX, offsetY);
                     target.Draw(sprite, states);
+                    sprite.Dispose();
                 }
             } else {
                 Sprite sprite = new Sprite(_textureBufferInvisible.Texture);
-                sprite.Position = new Vector2f(_worldPos.Item1 * _map.ChunkSize, _worldPos.Item2 * _map.ChunkSize);
+                sprite.Position = new Vector2f(offsetX, offsetY);
                 target.Draw(sprite, states);
+                sprite.Dispose();
             }
         }
     }
